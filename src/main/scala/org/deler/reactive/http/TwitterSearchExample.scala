@@ -7,7 +7,8 @@ import org.deler.reactive._
 import org.deler.reactive.Observable._
 import org.deler.reactive.swing._
 import com.ning.http.client._
-import net.liftweb.json._
+import net.liftweb.json.{DefaultFormats, JsonParser}
+import net.liftweb.json.JsonAST._
 import org.joda.time.Duration
 
 object TwitterSearchExample extends Application {
