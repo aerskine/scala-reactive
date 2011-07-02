@@ -5,6 +5,7 @@ import org.specs.runner.{JUnit, JUnitSuiteRunner}
 import org.specs.Specification
 import org.specs.mock.Mockito
 import org.joda.time.Instant
+import scala.collection.immutable._
 
 @RunWith(classOf[JUnitSuiteRunner])
 class ConnectableObservableTest extends Specification with JUnit with Mockito {

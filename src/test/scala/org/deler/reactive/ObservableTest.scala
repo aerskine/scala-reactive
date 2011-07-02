@@ -4,11 +4,11 @@ import org.junit.runner.RunWith
 import org.specs._
 import org.specs.mock.Mockito
 import org.specs.runner.{JUnitSuiteRunner, JUnit}
-import scala.collection._
 import org.joda.time.{Duration, Instant}
 import org.scalacheck.{Arbitrary, Prop}
 import java.util.concurrent.TimeoutException
 import org.deler.reactive.JodaTimeSupport._
+import scala.collection.immutable._
 
 @RunWith(classOf[JUnitSuiteRunner])
 class ObservableTest extends Specification with JUnit with Mockito with ScalaCheck {
@@ -434,7 +434,7 @@ class ObservableTest extends Specification with JUnit with Mockito with ScalaChe
     "allow filtering by type" in {
       val observable: Observable[Any] = Observable(scheduler, 1, "string")
 
-      val notifications: Seq[(Int, Notification[String])] = scheduler run {
+      val notifications = scheduler run {
         observable.ofType(classOf[String])
       }
 
@@ -568,9 +568,10 @@ class ObservableTest extends Specification with JUnit with Mockito with ScalaChe
     }
 
     "perform side effects while yielding same values" in {
+      import scala.collection.mutable.ListBuffer
       val observable = Observable(scheduler, "a", "b")
       var count = 0
-      val values = mutable.ListBuffer[String]()
+      val values = ListBuffer[String]()
 
       val notifications = scheduler run {
         observable perform {v => values += v; count += 1}
