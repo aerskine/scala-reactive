@@ -1197,44 +1197,44 @@ class ObservableTest extends Specification with JUnit with Mockito with ScalaChe
   "Observable.sliding" should {
     "observe 'size' notifications in the sliding window observable when the source updates" in {
       val observable1 = scheduler.createHotObservable(Seq(
-        310 -> OnNext(1),
-        320 -> OnNext(2),
-        330 -> OnNext(3),
-        340 -> OnNext(4),
-        350 -> OnNext(5),
-        400 -> OnCompleted
+        210 -> OnNext(1),
+        220 -> OnNext(2),
+        230 -> OnNext(3),
+        240 -> OnNext(4),
+        250 -> OnNext(5),
+        300 -> OnCompleted
       ))
 
       val notifications = scheduler.run(observable1.sliding(3).map(slidingWindowObserver _))
 
       notifications match {
-        case Seq((310, OnNext(w1)), (320, OnNext(w2)), (330, OnNext(w3)), (340, OnNext(w4)), (350, OnNext(w5)), (400, OnCompleted)) => {
+        case Seq((210, OnNext(w1)), (220, OnNext(w2)), (230, OnNext(w3)), (240, OnNext(w4)), (250, OnNext(w5)), (300, OnCompleted)) => {
           w1.notifications must be equalTo Seq(
-            310 -> OnNext(1),
-            320 -> OnNext(2),
-            330 -> OnNext(3),
-            330 -> OnCompleted
+            210 -> OnNext(1),
+            220 -> OnNext(2),
+            230 -> OnNext(3),
+            230 -> OnCompleted
           )
           w2.notifications must be equalTo Seq(
-            320 -> OnNext(2),
-            330 -> OnNext(3),
-            340 -> OnNext(4),
-            340 -> OnCompleted
+            220 -> OnNext(2),
+            230 -> OnNext(3),
+            240 -> OnNext(4),
+            240 -> OnCompleted
           )
           w3.notifications must be equalTo Seq(
-            330 -> OnNext(3),
-            340 -> OnNext(4),
-            350 -> OnNext(5),
-            350 -> OnCompleted
+            230 -> OnNext(3),
+            240 -> OnNext(4),
+            250 -> OnNext(5),
+            250 -> OnCompleted
           )
           w4.notifications must be equalTo Seq(
-            340 -> OnNext(4),
-            350 -> OnNext(5),
-            400 -> OnCompleted
+            240 -> OnNext(4),
+            250 -> OnNext(5),
+            300 -> OnCompleted
           )
           w5.notifications must be equalTo Seq(
-            350 -> OnNext(5),
-            400 -> OnCompleted
+            250 -> OnNext(5),
+            300 -> OnCompleted
           )
         }
         case s => fail("Not expected: %s".format(s))
@@ -1244,44 +1244,44 @@ class ObservableTest extends Specification with JUnit with Mockito with ScalaChe
   "Observable.slidingDuration" should {
     "observe notifications in the sliding window for 'duration' before completing" in {
       val observable1 = scheduler.createHotObservable(Seq(
-        310 -> OnNext(1),
-        320 -> OnNext(2),
-        330 -> OnNext(3),
-        340 -> OnNext(4),
-        350 -> OnNext(5),
-        400 -> OnCompleted
+        205 -> OnNext(1),
+        215 -> OnNext(2),
+        225 -> OnNext(3),
+        235 -> OnNext(4),
+        245 -> OnNext(5),
+        260 -> OnCompleted
       ))
 
       val notifications = scheduler.run(observable1.slidingDuration(new Duration(30), new Duration(10), scheduler).map(slidingWindowObserver _))
 
       notifications match {
-        case Seq((310, OnNext(w1)), (320, OnNext(w2)), (330, OnNext(w3)), (340, OnNext(w4)), (350, OnNext(w5)), (400, OnCompleted)) => {
+        case Seq((202, OnNext(w1)), (213, OnNext(w2)), (223, OnNext(w3)), (233, OnNext(w4)), (243, OnNext(w5)), (253, OnNext(emptyWindow)), (260, OnCompleted)) => {
           w1.notifications must be equalTo Seq(
-            310 -> OnNext(1),
-            320 -> OnNext(2),
-            330 -> OnNext(3),
-            330 -> OnCompleted
+            206 -> OnNext(1),
+            216 -> OnNext(2),
+            226 -> OnNext(3),
+            231 -> OnCompleted
           )
           w2.notifications must be equalTo Seq(
-            320 -> OnNext(2),
-            330 -> OnNext(3),
-            340 -> OnNext(4),
-            340 -> OnCompleted
+            216 -> OnNext(2),
+            226 -> OnNext(3),
+            236 -> OnNext(4),
+            242 -> OnCompleted
           )
           w3.notifications must be equalTo Seq(
-            330 -> OnNext(3),
-            340 -> OnNext(4),
-            350 -> OnNext(5),
-            350 -> OnCompleted
+            226 -> OnNext(3),
+            236 -> OnNext(4),
+            246 -> OnNext(5),
+            252 -> OnCompleted
           )
           w4.notifications must be equalTo Seq(
-            340 -> OnNext(4),
-            350 -> OnNext(5),
-            400 -> OnCompleted
+            236 -> OnNext(4),
+            246 -> OnNext(5),
+            260 -> OnCompleted
           )
           w5.notifications must be equalTo Seq(
-            350 -> OnNext(5),
-            400 -> OnCompleted
+            246 -> OnNext(5),
+            260 -> OnCompleted
           )
         }
         case s => fail("Not expected: %s".format(s))

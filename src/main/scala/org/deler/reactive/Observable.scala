@@ -1227,7 +1227,7 @@ private case class GroupedObservable[+A](source: ConformingObservable[A], size: 
 
 private case class GroupedByDurationObservable[+A](source: ConformingObservable[A], duration: Duration, step: Duration, scheduler: Scheduler)
   extends BaseObservable[Observable[A]] with ConformingObservable[Observable[A]] {
-  error("NOTICE: not completed")
+
   require(duration.getMillis > 0 && step.getMillis > 0, "duration=%s and step=%s, but both must be positive".format(duration, step))
 
   override def doSubscribe(observer: Observer[Observable[A]]): Closeable = {
@@ -1238,8 +1238,8 @@ private case class GroupedByDurationObservable[+A](source: ConformingObservable[
     class WindowObserver extends Observer[A] {
       val windows = new AtomicReference(immutable.Queue.empty[Window])
       val intervalSubscription = {
-        val intervals = Observable(scheduler, -1) ++ Observable.interval(duration, scheduler)
-        intervals.subscribe(onNext = observeNewWindowAtIntervals _)
+        val intervals = Observable(scheduler, -1) ++ Observable.interval(step, scheduler)
+        intervals.subscribe(onNext = observeNewWindowAtStepIntervals _)
       }
 
       def onNext(value: A) {
@@ -1262,18 +1262,18 @@ private case class GroupedByDurationObservable[+A](source: ConformingObservable[
         subscription.close()
       }
 
-      def observeNewWindowAtIntervals(i: Int) {
+      def observeNewWindowAtStepIntervals(i: Int) {
         val newWindow = new Window
         windows.set(windows.get.enqueue(newWindow))
         scheduler.schedule(observer.onNext(newWindow))
-        Observable.timer(step, scheduler).subscribe(closeWindowWhenStepTimeReached _)
+        Observable.timer(duration, scheduler).subscribe(closeWindowWhenDurationTimeReached _)
       }
 
       def observeValueInOpenWindows(value: A) {
         windows.get.foreach(w => scheduler.schedule(w.onNext(value)))
       }
 
-      def closeWindowWhenStepTimeReached(unused: Int) {
+      def closeWindowWhenDurationTimeReached(unused: Int) {
         for (w <- windows.get.headOption) {
           val (_, dequedWindows) = windows.get.dequeue
           windows.set(dequedWindows)
