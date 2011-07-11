@@ -40,7 +40,7 @@ abstract class Dispatcher[A] extends Subject[A] {
       subscriptions += this
     }
 
-    def close {
+    def close() {
       Dispatcher.this synchronized {
         subscriptions -= this
       }

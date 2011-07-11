@@ -1187,4 +1187,105 @@ class ObservableTest extends Specification with JUnit with Mockito with ScalaChe
       second.subscriptions must be equalTo Seq(200 -> 450)
     }
   }
+
+  private def slidingWindowObserver(window: Observable[Int]) = {
+    val windowObserver = new TestObserver[Int](scheduler)
+    window.subscribe(windowObserver)
+    windowObserver
+  }
+
+  "Observable.sliding" should {
+    "observe 'size' notifications in the sliding window observable when the source updates" in {
+      val observable1 = scheduler.createHotObservable(Seq(
+        310 -> OnNext(1),
+        320 -> OnNext(2),
+        330 -> OnNext(3),
+        340 -> OnNext(4),
+        350 -> OnNext(5),
+        400 -> OnCompleted
+      ))
+
+      val notifications = scheduler.run(observable1.sliding(3).map(slidingWindowObserver _))
+
+      notifications match {
+        case Seq((310, OnNext(w1)), (320, OnNext(w2)), (330, OnNext(w3)), (340, OnNext(w4)), (350, OnNext(w5)), (400, OnCompleted)) => {
+          w1.notifications must be equalTo Seq(
+            310 -> OnNext(1),
+            320 -> OnNext(2),
+            330 -> OnNext(3),
+            330 -> OnCompleted
+          )
+          w2.notifications must be equalTo Seq(
+            320 -> OnNext(2),
+            330 -> OnNext(3),
+            340 -> OnNext(4),
+            340 -> OnCompleted
+          )
+          w3.notifications must be equalTo Seq(
+            330 -> OnNext(3),
+            340 -> OnNext(4),
+            350 -> OnNext(5),
+            350 -> OnCompleted
+          )
+          w4.notifications must be equalTo Seq(
+            340 -> OnNext(4),
+            350 -> OnNext(5),
+            400 -> OnCompleted
+          )
+          w5.notifications must be equalTo Seq(
+            350 -> OnNext(5),
+            400 -> OnCompleted
+          )
+        }
+        case s => fail("Not expected: %s".format(s))
+      }
+    }
+  }
+  "Observable.slidingDuration" should {
+    "observe notifications in the sliding window for 'duration' before completing" in {
+      val observable1 = scheduler.createHotObservable(Seq(
+        310 -> OnNext(1),
+        320 -> OnNext(2),
+        330 -> OnNext(3),
+        340 -> OnNext(4),
+        350 -> OnNext(5),
+        400 -> OnCompleted
+      ))
+
+      val notifications = scheduler.run(observable1.slidingDuration(new Duration(30), new Duration(10), scheduler).map(slidingWindowObserver _))
+
+      notifications match {
+        case Seq((310, OnNext(w1)), (320, OnNext(w2)), (330, OnNext(w3)), (340, OnNext(w4)), (350, OnNext(w5)), (400, OnCompleted)) => {
+          w1.notifications must be equalTo Seq(
+            310 -> OnNext(1),
+            320 -> OnNext(2),
+            330 -> OnNext(3),
+            330 -> OnCompleted
+          )
+          w2.notifications must be equalTo Seq(
+            320 -> OnNext(2),
+            330 -> OnNext(3),
+            340 -> OnNext(4),
+            340 -> OnCompleted
+          )
+          w3.notifications must be equalTo Seq(
+            330 -> OnNext(3),
+            340 -> OnNext(4),
+            350 -> OnNext(5),
+            350 -> OnCompleted
+          )
+          w4.notifications must be equalTo Seq(
+            340 -> OnNext(4),
+            350 -> OnNext(5),
+            400 -> OnCompleted
+          )
+          w5.notifications must be equalTo Seq(
+            350 -> OnNext(5),
+            400 -> OnCompleted
+          )
+        }
+        case s => fail("Not expected: %s".format(s))
+      }
+    }
+  }
 }

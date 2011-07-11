@@ -1,10 +1,10 @@
 package org.deler.reactive
 
-import java.util.concurrent.atomic.AtomicInteger
 import scala.collection._
 import scala.concurrent.SyncVar
 import java.util.concurrent.{TimeoutException, LinkedBlockingQueue}
 import org.joda.time.{DateTimeZone, DateTime, Duration}
+import java.util.concurrent.atomic._
 
 /**
  * An observable can be subscribed to by an [[org.deler.reactive.Observer]]. Observables produce zero or more values
@@ -191,6 +191,14 @@ trait Observable[+A] {
   def takeUntil(other: Observable[Any]): Observable[A] = TakeUntil(this, other)
 
   def skipUntil(other: Observable[Any]): Observable[A] = SkipUntil(this, other)
+
+  def grouped(size: Int): Observable[Observable[A]] = sliding(size, size)
+
+  def groupedByDuration(duration: Duration, scheduler: Scheduler = Scheduler.threadPool): Observable[Observable[A]] = slidingDuration(duration, duration, scheduler)
+
+  def sliding(size: Int, step: Int = 1): Observable[Observable[A]] = GroupedObservable(this, size, step)
+
+  def slidingDuration(duration: Duration, step: Duration, scheduler: Scheduler = Scheduler.threadPool): Observable[Observable[A]] = GroupedByDurationObservable(this, duration, step, scheduler)
 
   /**
    * Returns an $coll that produces values from this $coll until `dueTime`, when it raises a
@@ -1145,4 +1153,137 @@ private case class Cache[A](source: Observable[A])
   }
 
   def latest: A = lastValue.get
+}
+
+
+private case class GroupedObservable[+A](source: ConformingObservable[A], size: Int, step: Int)
+  extends BaseObservable[Observable[A]] with ConformingObservable[Observable[A]] {
+
+  require(size > 0 && step > 0, "size=%d and step=%d, but both must be positive".format(size, step))
+
+  override def doSubscribe(observer: Observer[Observable[A]]): Closeable = {
+    val subscription = new MutableCloseable
+
+    class Window extends Dispatcher[A] {
+      @volatile var count = 0
+      override def onNext(value: A) {
+        count += 1
+        super.onNext(value)
+      }
+    }
+
+    class WindowObserver extends Observer[A] {
+      @volatile var count = 0
+      @volatile var windows = immutable.Queue.empty[Window]
+
+      def onNext(value: A) {
+        observeNewWindowWhenAtStep()
+        observeValueInOpenWindows(value)
+        closeWindowWhenSizeReached()
+      }
+
+      override def onError(e: Exception) {
+        windows.foreach(_.onError(e))
+        windows = immutable.Queue.empty[Window]
+        observer.onError(e)
+        subscription.close()
+      }
+
+      override def onCompleted() {
+        windows.foreach(_.onCompleted())
+        windows = immutable.Queue.empty[Window]
+        observer.onCompleted()
+        subscription.close()
+      }
+
+      def observeNewWindowWhenAtStep() {
+        if (count == 0) {
+          val newWindow = new Window
+          windows = windows.enqueue(newWindow)
+          observer.onNext(newWindow)
+        }
+        count = (count + 1) % step
+      }
+
+      def observeValueInOpenWindows(value: A) {
+        windows.foreach(_.onNext(value))
+      }
+
+      def closeWindowWhenSizeReached() {
+        for (w <- windows.headOption if w.count == size) {
+          val (_, dequedWindows) = windows.dequeue
+          windows = dequedWindows
+          w.onCompleted()
+        }
+      }
+    }
+
+    subscription.set(source.subscribe(new WindowObserver))
+
+    subscription
+  }
+}
+
+
+private case class GroupedByDurationObservable[+A](source: ConformingObservable[A], duration: Duration, step: Duration, scheduler: Scheduler)
+  extends BaseObservable[Observable[A]] with ConformingObservable[Observable[A]] {
+  error("NOTICE: not completed")
+  require(duration.getMillis > 0 && step.getMillis > 0, "duration=%s and step=%s, but both must be positive".format(duration, step))
+
+  override def doSubscribe(observer: Observer[Observable[A]]): Closeable = {
+    val subscription = new MutableCloseable
+
+    class Window extends Dispatcher[A]
+
+    class WindowObserver extends Observer[A] {
+      val windows = new AtomicReference(immutable.Queue.empty[Window])
+      val intervalSubscription = {
+        val intervals = Observable(scheduler, -1) ++ Observable.interval(duration, scheduler)
+        intervals.subscribe(onNext = observeNewWindowAtIntervals _)
+      }
+
+      def onNext(value: A) {
+        observeValueInOpenWindows(value)
+      }
+
+      override def onError(e: Exception) {
+        windows.get.foreach(_.onError(e))
+        windows.set(immutable.Queue.empty[Window])
+        observer.onError(e)
+        intervalSubscription.close()
+        subscription.close()
+      }
+
+      override def onCompleted() {
+        windows.get.foreach(_.onCompleted())
+        windows.set(immutable.Queue.empty[Window])
+        observer.onCompleted()
+        intervalSubscription.close()
+        subscription.close()
+      }
+
+      def observeNewWindowAtIntervals(i: Int) {
+        val newWindow = new Window
+        windows.set(windows.get.enqueue(newWindow))
+        scheduler.schedule(observer.onNext(newWindow))
+        Observable.timer(step, scheduler).subscribe(closeWindowWhenStepTimeReached _)
+      }
+
+      def observeValueInOpenWindows(value: A) {
+        windows.get.foreach(w => scheduler.schedule(w.onNext(value)))
+      }
+
+      def closeWindowWhenStepTimeReached(unused: Int) {
+        for (w <- windows.get.headOption) {
+          val (_, dequedWindows) = windows.get.dequeue
+          windows.set(dequedWindows)
+          w.onCompleted()
+        }
+      }
+    }
+
+    subscription.set(source.subscribe(new WindowObserver))
+
+    subscription
+  }
 }
