@@ -194,7 +194,7 @@ trait Observable[+A] {
 
   def grouped(size: Int): Observable[Observable[A]] = sliding(size, size)
 
-  def groupedByDuration(duration: Duration, scheduler: Scheduler = Scheduler.threadPool): Observable[Observable[A]] = slidingDuration(duration, duration, scheduler)
+  def groupedDuration(duration: Duration, scheduler: Scheduler = Scheduler.threadPool): Observable[Observable[A]] = slidingDuration(duration, duration, scheduler)
 
   def sliding(size: Int, step: Int = 1): Observable[Observable[A]] = GroupedObservable(this, size, step)
 
@@ -1231,59 +1231,67 @@ private case class GroupedByDurationObservable[+A](source: ConformingObservable[
   require(duration.getMillis > 0 && step.getMillis > 0, "duration=%s and step=%s, but both must be positive".format(duration, step))
 
   override def doSubscribe(observer: Observer[Observable[A]]): Closeable = {
-    val subscription = new MutableCloseable
+    val subscriptions = new CompositeCloseable
 
     class Window extends Dispatcher[A]
 
     class WindowObserver extends Observer[A] {
-      val windows = new AtomicReference(immutable.Queue.empty[Window])
-      val intervalSubscription = {
+      @volatile var windows = immutable.Queue.empty[Window]
+      subscriptions += {
+        // TODO intervals specified this way can suffer from 'drift' esp for short steps, or busy processes
+        // TODO refactor to scheduleRecursivelyAt the 'next' step after scheduler.now
         val intervals = Observable(scheduler, -1) ++ Observable.interval(step, scheduler)
         intervals.subscribe(onNext = observeNewWindowAtStepIntervals _)
       }
 
-      def onNext(value: A) {
+      def onNext(value: A) = subscriptions.synchronizeIfNotClosed {
         observeValueInOpenWindows(value)
       }
 
-      override def onError(e: Exception) {
-        windows.get.foreach(_.onError(e))
-        windows.set(immutable.Queue.empty[Window])
+      override def onError(e: Exception) = subscriptions.synchronizeClose {
+        windows.foreach(_.onError(e))
+        windows = immutable.Queue.empty[Window]
         observer.onError(e)
-        intervalSubscription.close()
-        subscription.close()
       }
 
-      override def onCompleted() {
-        windows.get.foreach(_.onCompleted())
-        windows.set(immutable.Queue.empty[Window])
+      override def onCompleted() = subscriptions.synchronizeClose {
+        windows.foreach(_.onCompleted())
+        windows = immutable.Queue.empty[Window]
         observer.onCompleted()
-        intervalSubscription.close()
-        subscription.close()
       }
 
-      def observeNewWindowAtStepIntervals(i: Int) {
+      def observeNewWindowAtStepIntervals(i: Int) = subscriptions.synchronizeIfNotClosed {
         val newWindow = new Window
-        windows.set(windows.get.enqueue(newWindow))
-        scheduler.schedule(observer.onNext(newWindow))
-        Observable.timer(duration, scheduler).subscribe(closeWindowWhenDurationTimeReached _)
+        windows = windows.enqueue(newWindow)
+        val windowSubscription = new MutableCloseable
+        subscriptions += windowSubscription
+        windowSubscription.set(scheduler.schedule {
+          subscriptions -= windowSubscription
+          observer.onNext(newWindow)
+        })
+        val windowCloseSubscription = new MutableCloseable
+        subscriptions += windowCloseSubscription
+        windowCloseSubscription.set(
+          Observable.timer(duration, scheduler).subscribe(closeWindowWhenDurationTimeReached(windowCloseSubscription, _))
+        )
       }
 
       def observeValueInOpenWindows(value: A) {
-        windows.get.foreach(w => scheduler.schedule(w.onNext(value)))
+        windows.foreach(_.onNext(value))
       }
 
-      def closeWindowWhenDurationTimeReached(unused: Int) {
-        for (w <- windows.get.headOption) {
-          val (_, dequedWindows) = windows.get.dequeue
-          windows.set(dequedWindows)
+      def closeWindowWhenDurationTimeReached(windowCloseSubscription: Closeable, unused: Int) = subscriptions.synchronizeIfNotClosed {
+        subscriptions -= windowCloseSubscription
+        for (w <- windows.headOption) {
+          val (_, dequedWindows) = windows.dequeue
+          windows = dequedWindows
           w.onCompleted()
         }
       }
     }
 
-    subscription.set(source.subscribe(new WindowObserver))
+    subscriptions += source.subscribe(new WindowObserver)
 
-    subscription
+    subscriptions
   }
 }

@@ -1257,30 +1257,30 @@ class ObservableTest extends Specification with JUnit with Mockito with ScalaChe
       notifications match {
         case Seq((202, OnNext(w1)), (213, OnNext(w2)), (223, OnNext(w3)), (233, OnNext(w4)), (243, OnNext(w5)), (253, OnNext(emptyWindow)), (260, OnCompleted)) => {
           w1.notifications must be equalTo Seq(
-            206 -> OnNext(1),
-            216 -> OnNext(2),
-            226 -> OnNext(3),
+            205 -> OnNext(1),
+            215 -> OnNext(2),
+            225 -> OnNext(3),
             231 -> OnCompleted
           )
           w2.notifications must be equalTo Seq(
-            216 -> OnNext(2),
-            226 -> OnNext(3),
-            236 -> OnNext(4),
+            215 -> OnNext(2),
+            225 -> OnNext(3),
+            235 -> OnNext(4),
             242 -> OnCompleted
           )
           w3.notifications must be equalTo Seq(
-            226 -> OnNext(3),
-            236 -> OnNext(4),
-            246 -> OnNext(5),
+            225 -> OnNext(3),
+            235 -> OnNext(4),
+            245 -> OnNext(5),
             252 -> OnCompleted
           )
           w4.notifications must be equalTo Seq(
-            236 -> OnNext(4),
-            246 -> OnNext(5),
+            235 -> OnNext(4),
+            245 -> OnNext(5),
             260 -> OnCompleted
           )
           w5.notifications must be equalTo Seq(
-            246 -> OnNext(5),
+            245 -> OnNext(5),
             260 -> OnCompleted
           )
         }

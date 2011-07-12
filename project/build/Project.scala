@@ -16,4 +16,14 @@ class Project(info: ProjectInfo) extends DefaultProject(info) {
   val specs      = "org.scala-tools.testing" %% "specs" % "1.6.8" % "test"
   val scalacheck = "org.scala-tools.testing" %% "scalacheck" % scalacheckVersion % "test"
   val mock       = "org.mockito" % "mockito-all" % "1.8.5" % "test"
+
+  val atgExtSnapshotsLocal = "ATG-snapshots" at "http://ghbr12d10087.csfb.cs-group.com:8081/artifactory/ext-snapshots-local"
+  val publishTo = atgExtSnapshotsLocal
+  Credentials.add("Artifactory Realm", "ghbr12d10087.csfb.cs-group.com", "admin", "password")
+
+  override def packageDocsJar = defaultJarPath("-javadoc.jar")
+  override def packageSrcJar= defaultJarPath("-sources.jar")
+  val sourceArtifact = Artifact.sources(artifactID)
+  val docsArtifact = Artifact.javadoc(artifactID)
+  override def packageToPublishActions = super.packageToPublishActions ++ Seq(packageDocs, packageSrc)
 }
