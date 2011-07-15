@@ -1,7 +1,8 @@
 package org.deler.reactive
 
 import java.util.concurrent.atomic.AtomicBoolean
-import scala.collection._
+import collection.generic
+import collection.mutable
 
 /**
  * Represents a subscription that can be cancelled by using the `close` method. Closing a subscription

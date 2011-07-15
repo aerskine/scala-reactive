@@ -1,6 +1,6 @@
 package org.deler.reactive
 
-import scala.collection._
+import collection.immutable.Queue
 
 /**
  * An object that is both an observer and an observable sequence.
@@ -63,7 +63,7 @@ abstract class ScheduledDispatcher[A](scheduler: Scheduler = Scheduler.immediate
  * [[org.deler.reactive.Observer]].
  */
 trait Recorder[A] extends Observer[A] {
-  private var notifications = immutable.Queue[Notification[A]]()
+  private var notifications = Queue[Notification[A]]()
 
   protected def replay(observer: Observer[A]) {
     notifications foreach {_.accept(observer)}

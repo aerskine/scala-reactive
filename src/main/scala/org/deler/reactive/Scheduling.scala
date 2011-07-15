@@ -1,7 +1,7 @@
 package org.deler.reactive
 
+import collection.immutable.{Queue, SortedSet}
 import org.joda.time._
-import scala.collection._
 import org.slf4j.LoggerFactory
 import java.util.concurrent.{ThreadFactory, Executors, ScheduledThreadPoolExecutor, TimeUnit}
 
@@ -256,7 +256,7 @@ class VirtualScheduler(initialNow: Instant = new Instant(100)) extends Scheduler
 }
 
 class TestObserver[T](scheduler: Scheduler) extends Observer[T] {
-  private var _notifications = immutable.Queue[(Int, Notification[T])]()
+  private var _notifications = Queue[(Int, Notification[T])]()
 
   def notifications = _notifications.toSeq
 

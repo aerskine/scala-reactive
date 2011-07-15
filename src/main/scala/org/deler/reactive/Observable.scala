@@ -1,10 +1,10 @@
 package org.deler.reactive
 
-import scala.collection._
+import collection.immutable.Queue
 import scala.concurrent.SyncVar
 import java.util.concurrent.{TimeoutException, LinkedBlockingQueue}
-import org.joda.time.{DateTimeZone, DateTime, Duration}
 import java.util.concurrent.atomic._
+import org.joda.time._
 
 /**
  * An observable can be subscribed to by an [[org.deler.reactive.Observer]]. Observables produce zero or more values
@@ -1174,7 +1174,7 @@ private case class GroupedObservable[+A](source: ConformingObservable[A], size: 
 
     class WindowObserver extends Observer[A] {
       @volatile var count = 0
-      @volatile var windows = immutable.Queue.empty[Window]
+      @volatile var windows = Queue.empty[Window]
 
       def onNext(value: A) {
         observeNewWindowWhenAtStep()
@@ -1184,14 +1184,14 @@ private case class GroupedObservable[+A](source: ConformingObservable[A], size: 
 
       override def onError(e: Exception) {
         windows.foreach(_.onError(e))
-        windows = immutable.Queue.empty[Window]
+        windows = Queue.empty[Window]
         observer.onError(e)
         subscription.close()
       }
 
       override def onCompleted() {
         windows.foreach(_.onCompleted())
-        windows = immutable.Queue.empty[Window]
+        windows = Queue.empty[Window]
         observer.onCompleted()
         subscription.close()
       }
@@ -1231,17 +1231,24 @@ private case class GroupedByDurationObservable[+A](source: ConformingObservable[
   require(duration.getMillis > 0 && step.getMillis > 0, "duration=%s and step=%s, but both must be positive".format(duration, step))
 
   override def doSubscribe(observer: Observer[Observable[A]]): Closeable = {
+    val (subscribedAtMs, stepMs) = (scheduler.now.getMillis, step.getMillis)
+    def timeUntilNextStep: Duration = {
+      val nowMs = scheduler.now.getMillis
+      val msUntilNextStep = stepMs - (nowMs - subscribedAtMs) % stepMs
+      new Duration(msUntilNextStep)
+    }
     val subscriptions = new CompositeCloseable
 
     class Window extends Dispatcher[A]
 
     class WindowObserver extends Observer[A] {
-      @volatile var windows = immutable.Queue.empty[Window]
-      subscriptions += {
-        // TODO intervals specified this way can suffer from 'drift' esp for short steps, or busy processes
-        // TODO refactor to scheduleRecursivelyAt the 'next' step after scheduler.now
-        val intervals = Observable(scheduler, -1) ++ Observable.interval(step, scheduler)
-        intervals.subscribe(onNext = observeNewWindowAtStepIntervals _)
+      @volatile var windows = Queue.empty[Window]
+
+      subscriptions += scheduler.scheduleRecursiveAfter(new Duration(0)) {
+        reschedule =>
+          scheduleOpenWindowAtStep()
+          scheduleCloseWindowAfterDuration()
+          reschedule(timeUntilNextStep)
       }
 
       def onNext(value: A) = subscriptions.synchronizeIfNotClosed {
@@ -1250,43 +1257,53 @@ private case class GroupedByDurationObservable[+A](source: ConformingObservable[
 
       override def onError(e: Exception) = subscriptions.synchronizeClose {
         windows.foreach(_.onError(e))
-        windows = immutable.Queue.empty[Window]
+        windows = Queue.empty[Window]
         observer.onError(e)
       }
 
       override def onCompleted() = subscriptions.synchronizeClose {
         windows.foreach(_.onCompleted())
-        windows = immutable.Queue.empty[Window]
+        windows = Queue.empty[Window]
         observer.onCompleted()
       }
 
-      def observeNewWindowAtStepIntervals(i: Int) = subscriptions.synchronizeIfNotClosed {
-        val newWindow = new Window
-        windows = windows.enqueue(newWindow)
+      def scheduleOpenWindowAtStep() {
         val windowSubscription = new MutableCloseable
         subscriptions += windowSubscription
         windowSubscription.set(scheduler.schedule {
           subscriptions -= windowSubscription
-          observer.onNext(newWindow)
+          val w = enqueueNewWindow()
+          if (w.isDefined) observer.onNext(w.get)
         })
+      }
+
+      def scheduleCloseWindowAfterDuration() {
         val windowCloseSubscription = new MutableCloseable
         subscriptions += windowCloseSubscription
-        windowCloseSubscription.set(
-          Observable.timer(duration, scheduler).subscribe(closeWindowWhenDurationTimeReached(windowCloseSubscription, _))
-        )
+        windowCloseSubscription.set(scheduler.scheduleAfter(duration) {
+          subscriptions -= windowCloseSubscription
+          dequeueOldWindow()
+        })
       }
 
       def observeValueInOpenWindows(value: A) {
         windows.foreach(_.onNext(value))
       }
 
-      def closeWindowWhenDurationTimeReached(windowCloseSubscription: Closeable, unused: Int) = subscriptions.synchronizeIfNotClosed {
-        subscriptions -= windowCloseSubscription
-        for (w <- windows.headOption) {
-          val (_, dequedWindows) = windows.dequeue
-          windows = dequedWindows
-          w.onCompleted()
+      def enqueueNewWindow(): Option[Window] = {
+        var enqueued = Option.empty[Window]
+        subscriptions.synchronizeIfNotClosed {
+          val w = new Window
+          windows = windows.enqueue(w)
+          enqueued = Some(w)
         }
+        enqueued
+      }
+
+      def dequeueOldWindow() = subscriptions.synchronizeIfNotClosed {
+        val (w, dequeuedWindows) = windows.dequeue
+        windows = dequeuedWindows
+        w.onCompleted()
       }
     }
 

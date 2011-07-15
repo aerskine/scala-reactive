@@ -1255,7 +1255,7 @@ class ObservableTest extends Specification with JUnit with Mockito with ScalaChe
       val notifications = scheduler.run(observable1.slidingDuration(new Duration(30), new Duration(10), scheduler).map(slidingWindowObserver _))
 
       notifications match {
-        case Seq((202, OnNext(w1)), (213, OnNext(w2)), (223, OnNext(w3)), (233, OnNext(w4)), (243, OnNext(w5)), (253, OnNext(emptyWindow)), (260, OnCompleted)) => {
+        case Seq((202, OnNext(w1)), (211, OnNext(w2)), (221, OnNext(w3)), (231, OnNext(w4)), (241, OnNext(w5)), (251, OnNext(emptyWindow)), (260, OnCompleted)) => {
           w1.notifications must be equalTo Seq(
             205 -> OnNext(1),
             215 -> OnNext(2),
@@ -1266,13 +1266,13 @@ class ObservableTest extends Specification with JUnit with Mockito with ScalaChe
             215 -> OnNext(2),
             225 -> OnNext(3),
             235 -> OnNext(4),
-            242 -> OnCompleted
+            240 -> OnCompleted
           )
           w3.notifications must be equalTo Seq(
             225 -> OnNext(3),
             235 -> OnNext(4),
             245 -> OnNext(5),
-            252 -> OnCompleted
+            250 -> OnCompleted
           )
           w4.notifications must be equalTo Seq(
             235 -> OnNext(4),
